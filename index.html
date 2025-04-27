@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Realtime Chat & Checkbox</title>
+  <title>ChitterChattir Realtime</title>
   <style>
     body { font-family: Arial, sans-serif; margin: 0; padding: 0; }
     .tabs { display: flex; background: #333; }
@@ -11,13 +11,31 @@
     .tab.active { background: #555; }
     .panel { display: none; padding: 1rem; }
     .panel.active { display: block; }
-    #messages { height: 300px; overflow-y: auto; border: 1px solid #ccc; padding: 0.5rem; }
-    #messages .message { margin-bottom: 0.5rem; }
+
+    /* Grid of 1,000,000 boxes */
+    #checkboxes {
+      display: grid;
+      grid-template-columns: repeat(1000, 20px);
+      grid-auto-rows: 20px;
+      gap: 1px;
+      height: calc(100vh - 120px);
+      overflow: auto;
+    }
+    .grid-box {
+      appearance: none;
+      width: 20px;
+      height: 20px;
+      background-color: white;
+      border: 1px solid #ccc;
+      margin: 0;
+      padding: 0;
+      cursor: pointer;
+    }
+    .grid-box:checked {
+      background-color: blue;
+    }
     footer { position: fixed; bottom: 0; width: 100%; background: #f1f1f1; text-align: center; padding: 0.5rem; }
   </style>
-  <!-- Firebase SDKs -->
-  <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-app-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-database-compat.js"></script>
 </head>
 <body>
   <div class="tabs">
@@ -25,7 +43,7 @@
     <div class="tab" data-target="clicking">Clicking</div>
   </div>
   <div id="chat" class="panel active">
-    <div id="messages"></div>
+    <div id="messages" style="height:80vh; overflow:auto; border:1px solid #ccc; padding:0.5rem;"></div>
     <input type="text" id="msgInput" placeholder="Type a message..." style="width:80%;" />
     <button id="sendBtn">Send</button>
   </div>
@@ -35,116 +53,41 @@
   <footer>Your key: <span id="userKey"></span></footer>
 
   <script>
-  // ==== CONFIG ====
-  // TODO: Replace with your Firebase project config
-  const firebaseConfig = {
-    apiKey: "YOUR_API_KEY",
-    authDomain: "YOUR_PROJECT_ID.firebaseapp.com",
-    databaseURL: "https://YOUR_PROJECT_ID.firebaseio.com",
-    projectId: "YOUR_PROJECT_ID",
-    storageBucket: "YOUR_PROJECT_ID.appspot.com",
-    messagingSenderId: "YOUR_SENDER_ID",
-    appId: "YOUR_APP_ID"
-  };
-  firebase.initializeApp(firebaseConfig);
-  const db = firebase.database();
+  const OWNER = 'tzarbomba64';
+  const REPO = 'chitterchattir';
+  const CHAT_ISSUE = 1;
+  const CHECKBOX_FILE = 'checkboxes.json';
+  const BRANCH = 'main';
 
-  // ==== UTILITIES ====
-  function genKey(len = 16) {
-    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_';
-    let k = '';
-    for (let i = 0; i < len; i++) k += chars.charAt(Math.floor(Math.random() * chars.length));
-    return k;
-  }
-  function setCookie(name, value, days = 365) {
-    const d = new Date(); d.setTime(d.getTime() + days*24*60*60*1000);
-    document.cookie = name + '=' + value + ';expires=' + d.toUTCString() + ';path=/';
-  }
-  function getCookie(name) {
-    const v = document.cookie.match('(^|;) ?' + name + '=([^;]*)(;|$)');
-    return v ? v[2] : null;
-  }
-  // Profanity filter
-  const bannedWords = ['badword1','badword2','badword3']; // extend
-  function filterProfanity(text) {
-    const pattern = new RegExp(bannedWords.join('|'), 'gi');
-    return text.replace(pattern, match => '*'.repeat(match.length));
-  }
+  // Cookie utils & GitHub auth
+  function setCookie(n,v,d=365){const e=new Date();e.setTime(e.getTime()+d*24*60*60*1e3);document.cookie=`${n}=${v};expires=${e.toUTCString()};path=/`;}
+  function getCookie(n){const m=document.cookie.match('(^|;) ?'+n+'=([^;]*)(;|$)');return m?m[2]:null;}
+  let ghToken=getCookie('ghToken');
+  if(!ghToken){ ghToken=prompt('GitHub Token (repo scope):'); setCookie('ghToken', ghToken); }
+  const authHeaders={'Authorization':'token '+ghToken,'Accept':'application/vnd.github.v3+json','Content-Type':'application/json'};
 
-  // ==== USER IDENTIFICATION ====
-  let userKey = getCookie('userKey');
-  if (!userKey) {
-    userKey = genKey(12);
-    setCookie('userKey', userKey);
-  }
-  const username = 'user-' + userKey;
-  document.getElementById('userKey').textContent = userKey;
+  // User key
+  function genKey(l=12){const c='ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';let k='';for(let i=0;i<l;i++)k+=c.charAt(Math.random()*c.length|0);return k;}
+  let userKey=getCookie('userKey'); if(!userKey){userKey=genKey();setCookie('userKey',userKey);} const username='user-'+userKey;
+  document.getElementById('userKey').textContent=userKey;
 
-  // ==== TAB LOGIC ====
-  document.querySelectorAll('.tab').forEach(tab => {
-    tab.addEventListener('click', () => {
-      document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
-      document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
-      tab.classList.add('active');
-      document.getElementById(tab.dataset.target).classList.add('active');
-    });
-  });
+  // Tab switch
+  document.querySelectorAll('.tab').forEach(t=>t.onclick=()=>{document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));document.querySelectorAll('.panel').forEach(p=>p.classList.remove('active'));t.classList.add('active');document.getElementById(t.dataset.target).classList.add('active');});
 
-  // ==== MESSAGING ====
-  const messagesRef = db.ref('messages');
-  document.getElementById('sendBtn').onclick = () => {
-    let text = document.getElementById('msgInput').value.trim();
-    if (!text) return;
-    text = filterProfanity(text);
-    messagesRef.push({ username, text, ts: Date.now() });
-    document.getElementById('msgInput').value = '';
-  };
-  messagesRef.limitToLast(100).on('child_added', snap => {
-    const msg = snap.val();
-    const div = document.createElement('div');
-    div.classList.add('message');
-    const time = new Date(msg.ts).toLocaleTimeString();
-    div.textContent = `[${time}] ${msg.username}: ${msg.text}`;
-    document.getElementById('messages').appendChild(div);
-    document.getElementById('messages').scrollTop = document.getElementById('messages').scrollHeight;
-  });
+  // Chat
+  const msgDiv=document.getElementById('messages'), msgInput=document.getElementById('msgInput'), sendBtn=document.getElementById('sendBtn');
+  async function fetchComments(){const res=await fetch(`https://api.github.com/repos/${OWNER}/${REPO}/issues/${CHAT_ISSUE}/comments`,{headers:authHeaders});const cmts=await res.json();msgDiv.innerHTML='';cmts.forEach(c=>{const time=new Date(c.created_at).toLocaleTimeString();const txt=c.body.replace(/badword1|badword2|badword3/gi,m=>'*'.repeat(m.length));const d=document.createElement('div');d.textContent=`[${time}] ${c.user.login}: ${txt}`;msgDiv.appendChild(d);});msgDiv.scrollTop=msgDiv.scrollHeight;}
+  sendBtn.onclick=async()=>{let t=msgInput.value.trim();if(!t) return;await fetch(`https://api.github.com/repos/${OWNER}/${REPO}/issues/${CHAT_ISSUE}/comments`,{method:'POST',headers:authHeaders,body:JSON.stringify({body:`[${username}] ${t.replace(/badword1|badword2|badword3/gi,m=>'*'.repeat(m.length))}`})});msgInput.value='';fetchComments();};fetchComments();setInterval(fetchComments,5000);
 
-  // ==== CLICKING (CHECKBOXES) ====
-  const tasks = ['Option A','Option B','Option C','Option D'];
-  const cbRef = db.ref('checkboxes');
-  const container = document.getElementById('checkboxes');
+  // Checkboxes grid
+  const total=1e6;let cbSha,cbState={};const grid=document.getElementById('checkboxes');
+  // init elements
+  for(let i=0;i<total;i++){const cb=document.createElement('input');cb.type='checkbox';cb.id='cb-'+i;cb.className='grid-box';cb.onchange=saveCheckboxes;grid.appendChild(cb);}  
 
-  // create checkboxes in DOM
-  tasks.forEach((task, i) => {
-    const id = 'task-' + i;
-    const wrapper = document.createElement('div');
-    const input = document.createElement('input');
-    input.type = 'checkbox';
-    input.id = id;
-    const label = document.createElement('label');
-    label.htmlFor = id;
-    label.textContent = task;
-    wrapper.append(input, label);
-    container.appendChild(wrapper);
-    input.addEventListener('change', () => {
-      cbRef.child(id).set({
-        checked: input.checked,
-        user: username,
-        ts: Date.now()
-      });
-    });
-  });
+  async function fetchCheckboxes(){const res=await fetch(`https://api.github.com/repos/${OWNER}/${REPO}/contents/${CHECKBOX_FILE}?ref=${BRANCH}`,{headers:authHeaders});const data=await res.json();cbSha=data.sha;cbState=JSON.parse(atob(data.content));for(let i=0;i<total;i++){document.getElementById('cb-'+i).checked=!!cbState['cb-'+i];}}  
+  async function saveCheckboxes(){for(let i=0;i<total;i++) cbState['cb-'+i]=document.getElementById('cb-'+i).checked;const content=btoa(JSON.stringify(cbState));const res=await fetch(`https://api.github.com/repos/${OWNER}/${REPO}/contents/${CHECKBOX_FILE}`,{method:'PUT',headers:authHeaders,body:JSON.stringify({message:'Update grid',content,sha:cbSha,branch:BRANCH})});const j=await res.json();cbSha=j.content.sha;}  
 
-  // listen for changes
-  cbRef.on('value', snap => {
-    const data = snap.val() || {};
-    tasks.forEach((_, i) => {
-      const id = 'task-' + i;
-      const state = data[id];
-      const el = document.getElementById(id);
-      el.checked = state ? state.checked : false;
-    });
-  });
+  fetchCheckboxes();setInterval(fetchCheckboxes,5000);
   </script>
 </body>
 </html>
